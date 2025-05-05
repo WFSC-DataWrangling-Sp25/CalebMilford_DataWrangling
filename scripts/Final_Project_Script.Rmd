@@ -36,22 +36,87 @@ all_herp_data <- read_csv("../data_raw/Combined_Frog_Project_Data.csv")
 all_herp_data
 ```
 
-## R Markdown
+### Week 3: Intro to data frames
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Goal is to parse down the data frame and remove unnecessary columns or info that is not relevant to my project
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+#Removing completely unnesesary columns 
+all_herp_data2 <- all_herp_data %>% 
+  select(-surveyors, -Adult, -Adults_removed, -Juv, -Juv_removed, -Larvae,
+         -Larvae_removed, -Egg_mass, -County, -Final_Start_NAD83_East,
+         -Final_Start_NAD83_North) %>% 
+  rename("Taxon" = taxon) %>% 
+  arrange(Date)
+         
+#Just to more easiliy visualize what I am looking at without so much outside info 
+all_herp_data_obrev <- all_herp_data2 %>% 
+  select(Date, Start_time, Site_name, Species, No_Obs)
+all_herp_data_obrev
 ```
 
-## Including Plots
+### Week 6: Cleaning untidy data
 
-You can also embed plots, for example:
+```{r}
+#Replacing unclear notation or 0's with NA's
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+all_herp_data2 <- all_herp_data2 %>% 
+  mutate(Air_temp_150cm_C = na_if(Air_temp_150cm_C, "n/r"), 
+         Water_tmp_5cm_C = na_if(Water_tmp_5cm_C, "n/r"),
+         Relative_humidity = na_if(Relative_humidity, "n/r"),
+         Floating_species = na_if(Floating_species, "0"),
+         Submerged_species = na_if(Submerged_species, "0"), 
+         Emergent_species = na_if(Emergent_species, "0"))
+  
+#seperating the date column into day month year columns 
+all_herp_data2 <- all_herp_data2 %>% 
+  separate(Date, c("Year", "Month", "Day"), sep = "-")
+
+#Changing the data frame to one row per survey instead of one row per species found 
+all_herp_data3 <- all_herp_data2 %>%
+  group_by(Year, Month, Day, Site_name, Start_time) %>%
+  summarise(
+    Species = paste(unique(Species), collapse = ", "),
+    .groups = "drop"
+  )
+#This worked however it did not maintain the orignal data frames number of columns. It only gave back the columns I grouped by. Need to come back and figure out how to have each row represent 1 survey while maintaining all origial columns 
+
+#Summarize detections by month/year for each species 
+#This data will help us to determine site closure when lookig at occupancy 
+KISO_monthly_det <- all_herp_data3 %>% 
+  filter(Species == "KISO") %>% 
+  group_by(Year, Month) %>% 
+  summarise(Detections = n(), .groups = "drop")
+KISO_monthly_det
+
+write_csv(KISO_monthly_det, "../outputs/KISO_monthly_det.csv")
+
+BUAL_monthly_det <- all_herp_data3 %>% 
+  filter(Species == "BUAL") %>% 
+  group_by(Year, Month) %>% 
+  summarise(Detections = n(), .groups = "drop")
+
+write_csv(BUAL_monthly_det, "../outputs/BUAL_monthly_det.csv")
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Week 5: Data Visualization
+
+```{r}
+all_herp_data2 %>% 
+  filter(Species == "KISO") %>% 
+  ggplot(aes(x = Air_temp_150cm_C, y = Water_tmp_5cm_C))+
+  geom_point()+
+  labs(x = "Air Temp (C)", y = "Water Temp (C)")+
+  theme_bw()
+
+all_herp_data2 %>% 
+  filter(Species == "BUAL") %>% 
+  ggplot(aes(x = Air_temp_150cm_C, y = Water_tmp_5cm_C))+
+  geom_point()+
+  labs(x = "Air Temp (C)", y = "Water Temp (C)")+
+  theme_bw()
+
+
+#This part still needs a lot of work dont judge me 
+```
