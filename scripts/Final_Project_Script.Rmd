@@ -1,0 +1,57 @@
+---
+title: "Final_Project_Script"
+author: "Caleb Milford"
+date: "Spring 25"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Installing and loading initial packages
+
+```{r}
+# install.packages("tidyverse")
+# install.packages("rmarkdown")
+# install.packages("terra")
+
+library(tidyverse)
+library(rmarkdown)
+library(terra)
+
+```
+
+## My raw data
+
+The data that I am using "Combines_Frog_Project_Data.csv" is the culmination of all the herpetological surveys that have been done over the past three years from the Bullfrog crew that is working throughout southeast Arizona from the Bauder lab. During these surveys they record all herps that are encountered during every survey as well as all other relevant data at the time of encounter. This is everything from the surveyors names, species encountered, location in UTM coordinates, site level covariates like vegetation and much more. My primary goal throughout this script will be to clean and midify this data set so that it is usable for my first thesis chapter.
+
+My thesis chapter will only be looking at two species specifically and doing some occupancy modeling for both of them individually. The two species are the Sonoran mud turtle (*Kinosternon sonoriense*) and the Sonora desert toad (*Incilius alvarius*) and I am primarily interested in how site level and landscape level covariates are affecting the presence/ absence of these two species. Considering this initial data set has a lot of extra information in it. My first goals will be to pull out the appropriate info so I can continue analysis.
+
+**Loading in raw data**
+
+```{r}
+#getwd()
+all_herp_data <- read_csv("../data_raw/Combined_Frog_Project_Data.csv")
+all_herp_data
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
