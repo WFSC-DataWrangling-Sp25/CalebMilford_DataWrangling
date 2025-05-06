@@ -72,14 +72,15 @@ all_herp_data2 <- all_herp_data2 %>%
 all_herp_data2 <- all_herp_data2 %>% 
   separate(Date, c("Year", "Month", "Day"), sep = "-")
 
-#Changing the data frame to one row per survey instead of one row per species found 
+#Changing the data frame to one row per survey instead of one row per 
+#species found 
 all_herp_data3 <- all_herp_data2 %>%
   group_by(Year, Month, Day, Site_name, Start_time) %>%
   summarise(
     Species = paste(unique(Species), collapse = ", "),
     .groups = "drop"
   )
-#This worked however it did not maintain the orignal data frames number of columns. It only gave back the columns I grouped by. Need to come back and figure out how to have each row represent 1 survey while maintaining all origial columns 
+#This worked however it did not maintain the orignal data frames number of #columns. It only gave back the columns I grouped by. Need to come back and #figure out how to have each row represent 1 survey while maintaining all #origial columns 
 
 #Summarize detections by month/year for each species 
 #This data will help us to determine site closure when lookig at occupancy 
@@ -119,4 +120,31 @@ all_herp_data2 %>%
 
 
 #This part still needs a lot of work dont judge me 
+```
+
+### Determining if dipneting can be used  as a detection method or can be thrown out - Week 7?
+
+```{r}
+#Comparing the detection of my species with the Disposition column 
+dispo_test <- all_herp_data2 %>%
+  separate(Start_time, c("Hour", "Minute"), sep = 2) %>% 
+  mutate(Date_time = make_datetime(year = as.integer(Year), 
+                                   month = as.integer(Month),
+                                   day = as.integer(Day), 
+                                   hour = as.integer(Hour), 
+                                   min = as.integer(Minute))) %>% 
+  select(Date_time, Site_name, Species, Disposition,
+         Comments) %>% 
+  filter(Species == "KISO" | Species == "BUAL") %>% 
+  arrange(Date_time)
+
+dispo_test
+
+#Confirming that the only time my species were encountered was during #"observed", "removed", "none", aka visual surveys 
+unique(all_herp_data2$Disposition)
+unique(dispo_test$Disposition)
+  
+str_detect(dispo_test$Comments, "dipnet")
+
+
 ```
