@@ -15,10 +15,12 @@ Installing and loading initial packages
 # install.packages("tidyverse")
 # install.packages("rmarkdown")
 # install.packages("terra")
+#install.packages("leaflet")
 
 library(tidyverse)
 library(rmarkdown)
 library(terra)
+library(leaflet)
 
 ```
 
@@ -55,7 +57,7 @@ all_herp_data_obrev <- all_herp_data2 %>%
 all_herp_data_obrev
 ```
 
-### Week 6: Cleaning untidy data
+### Week 6: Cleaning untidy data and Week 4: Group Joins
 
 ```{r}
 #Replacing unclear notation or 0's with NA's
@@ -76,16 +78,30 @@ all_herp_data2 <- all_herp_data2 %>%
 #species found 
 all_herp_data3 <- all_herp_data2 %>%
   group_by(Year, Month, Day, Site_name, Start_time) %>%
-  summarise(
-    Species = paste(unique(Species), collapse = ", "),
-    .groups = "drop"
-  )
-#This worked however it did not maintain the orignal data frames number of #columns. It only gave back the columns I grouped by. Need to come back and #figure out how to have each row represent 1 survey while maintaining all #origial columns 
+  summarise(Species_all = paste(unique(Species), collapse = ", "),
+    .groups = "drop")
+
+all_herp_data3 #Each row is now one individual survey
+
+survey_details <- all_herp_data2 %>% 
+  select(-Taxon, -Species, -No_Obs, -Disposition, -Comments)
+  
+  
+left_join(all_herp_data3, survey_details, join_by(Year, Month, Day, Site_name, Start_time))
+
+#innerjoin - this actually didnt work, unsure why right now. But one big red flag is No_obs because this is def off for this new dataframe 
+
+#This worked however it did not maintain the orignal data frames number of
+#columns. It only gave back the columns I grouped by. Need to come back and
+#figure out how to have each row represent 1 survey while maintaining all
+#origial columns 
+
+
 
 #Summarize detections by month/year for each species 
 #This data will help us to determine site closure when lookig at occupancy 
 KISO_monthly_det <- all_herp_data3 %>% 
-  filter(Species == "KISO") %>% 
+  filter(Species_all == "KISO") %>% 
   group_by(Year, Month) %>% 
   summarise(Detections = n(), .groups = "drop")
 KISO_monthly_det
@@ -99,6 +115,29 @@ BUAL_monthly_det <- all_herp_data3 %>%
 
 write_csv(BUAL_monthly_det, "../outputs/BUAL_monthly_det.csv")
 
+```
+
+### Summarizing the \# of times each site was surveyed each year 
+
+#### Week 6 again 
+
+```{r}
+#Summarizing the # of times each site was surveyed each year
+survey_year_summary <- all_herp_data3 %>% 
+  group_by(Site_name, Year) %>% 
+  summarise(site_visits = n(), .groups = "drop")
+
+survey_year_summary
+
+#Pivot wider so that columns are designated by years and rows by survey sites 
+survey_year_summary <- survey_year_summary %>%
+  pivot_wider(names_from = Year,
+              values_from = site_visits,
+              values_fill = 0  # Fills in 0 where a site has no surveys that year
+  )
+survey_year_summary
+
+##Note that this was done before dipnet surveys were removed. May need to come back and modify 
 ```
 
 ### Week 5: Data Visualization
@@ -122,7 +161,9 @@ all_herp_data2 %>%
 #This part still needs a lot of work dont judge me 
 ```
 
-### Determining if dipneting can be used  as a detection method or can be thrown out - Week 7?
+### Week 7: Dates and Strings
+
+#### Determining if dipneting can be used as a detection method or can be thrown out
 
 ```{r}
 #Comparing the detection of my species with the Disposition column 
@@ -140,11 +181,76 @@ dispo_test <- all_herp_data2 %>%
 
 dispo_test
 
-#Confirming that the only time my species were encountered was during #"observed", "removed", "none", aka visual surveys 
+#Confirming that the only time my species were encountered was during 
+#"observed", "removed", "none", aka visual surveys 
 unique(all_herp_data2$Disposition)
 unique(dispo_test$Disposition)
-  
+
+#Also confirming that there wasn't mention of dipetting in the comments 
+#These surveys can be thrown out because they were not applicable for detenction
+#or occupancy 
 str_detect(dispo_test$Comments, "dipnet")
 
 
+```
+
+### Week 12: Making Choices
+
+#### Creating a new data frame that shows encounter history instead of \# of individuals found using if/else
+
+```{r}
+
+```
+
+### Week 14: Geospacial Data 
+
+#### This data has to do with the other half of my thesis. The two chapter are completely unrelated but the main thing I want to do with this data is get a map with Lat/Lon coordinates of my field sites
+
+```{r}
+#Loading in Rio Grande Leopard Frog Field Site data 
+RABE_data <- read.csv("../data_raw/RABE_SiteQuery_HerpsDB.csv")
+summary(RABE_data)
+head(RABE_data)
+
+RABE_sites <- RABE_data %>% 
+  select(Num, Site, SiteAt, UTMEast_NAD83, UTMNorth_NAD83, Zone) %>% 
+  rename(Site_num = "Num")
+RABE_sites
+
+# Need to create a SpatVector from UTM coordinates
+RABE_sites_vect <- vect(RABE_sites, 
+                   geom = c("UTMEast_NAD83", "UTMNorth_NAD83"), 
+                   crs = paste0("EPSG:269", unique(RABE_sites$Zone)))
+
+# Reproject to WGS84 (lat/lon)
+sites_latlon <- project(RABE_sites_vect, "EPSG:4326")
+
+# Extract coordinates
+coords_latlon <- crds(sites_latlon, df = TRUE)
+
+# Add to my original data frame
+RABE_sites$Longitude <- coords_latlon[, "x"]
+RABE_sites$Latitude <- coords_latlon[, "y"]
+
+RABE_sites
+
+#Now plotting the points on an interactive map 
+#I recognize we never used the leaflet package in class but this is very helpful for
+#my project so I decided to go for it 
+
+leaflet(data = RABE_sites) %>%
+  addTiles() %>%  # Adds the default OpenStreetMap tiles
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    popup = ~paste0(
+      "<strong>Site:</strong> ", Site_num, "<br>",
+      "<strong>Latitude:</strong> ", round(Latitude, 5), "<br>",
+      "<strong>Longitude:</strong> ", round(Longitude, 5)
+    ),
+    radius = 5,
+    fillColor = "blue",
+    color = "black",
+    fillOpacity = 0.7
+  )
 ```
