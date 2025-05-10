@@ -21,6 +21,8 @@ library(tidyverse)
 library(rmarkdown)
 library(terra)
 library(leaflet)
+library(htmlwidgets)
+
 
 ```
 
@@ -106,20 +108,20 @@ KISO_monthly_det <- all_herp_data3 %>%
   summarise(Detections = n(), .groups = "drop")
 KISO_monthly_det
 
-write_csv(KISO_monthly_det, "../outputs/KISO_monthly_det.csv")
+write_csv(KISO_monthly_det, "../data_clean//KISO_monthly_det.csv")
 
 BUAL_monthly_det <- all_herp_data3 %>% 
   filter(Species == "BUAL") %>% 
   group_by(Year, Month) %>% 
   summarise(Detections = n(), .groups = "drop")
 
-write_csv(BUAL_monthly_det, "../outputs/BUAL_monthly_det.csv")
+write_csv(BUAL_monthly_det, "../data_clean//BUAL_monthly_det.csv")
 
 ```
 
-### Summarizing the \# of times each site was surveyed each year 
+### Summarizing the \# of times each site was surveyed each year
 
-#### Week 6 again 
+#### Week 6 again
 
 ```{r}
 #Summarizing the # of times each site was surveyed each year
@@ -202,7 +204,7 @@ str_detect(dispo_test$Comments, "dipnet")
 
 ```
 
-### Week 14: Geospacial Data 
+### Week 14: Geospacial Data
 
 #### This data has to do with the other half of my thesis. The two chapter are completely unrelated but the main thing I want to do with this data is get a map with Lat/Lon coordinates of my field sites
 
@@ -233,12 +235,13 @@ RABE_sites$Longitude <- coords_latlon[, "x"]
 RABE_sites$Latitude <- coords_latlon[, "y"]
 
 RABE_sites
+write_csv(RABE_sites, "../data_clean//RABE_sites.csv")
 
 #Now plotting the points on an interactive map 
 #I recognize we never used the leaflet package in class but this is very helpful for
 #my project so I decided to go for it 
 
-leaflet(data = RABE_sites) %>%
+RABE_site_map <- leaflet(data = RABE_sites) %>%
   addTiles() %>%  # Adds the default OpenStreetMap tiles
   addCircleMarkers(
     lng = ~Longitude,
@@ -253,4 +256,51 @@ leaflet(data = RABE_sites) %>%
     color = "black",
     fillOpacity = 0.7
   )
+RABE_site_map
+
+
+#Saving RABE site map in outputs folder 
+saveWidget(RABE_site_map, "../outputs/RABE_sites_map.html", selfcontained = TRUE)
+
+
+#Now doing the same with the KISO/BUAL Data sets 
+KISO_BUAL_sites <- all_herp_data2 %>% 
+  select(Site_name, Start_NAD83_East, Start_NAD83_North) %>%
+  drop_na() %>% 
+  distinct(Site_name, Start_NAD83_East, Start_NAD83_North, .keep_all = TRUE)
+
+herp_vect <- vect(KISO_BUAL_sites,
+                  geom = c("Start_NAD83_East", "Start_NAD83_North"),
+                  crs = "EPSG:26912")
+
+herp_latlon <- project(herp_vect, "EPSG:4326")
+
+coords <- crds(herp_latlon, df = TRUE)
+
+KISO_BUAL_sites$Longitude <- coords$x
+KISO_BUAL_sites$Latitude <- coords$y  
+
+KISO_BUAL_sites
+
+KISO_BUAL_site_map <- leaflet(data = KISO_BUAL_sites) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    popup = ~paste0(
+      "<strong>Site Name:</strong> ", Site_name, "<br>",
+      "<strong>Latitude:</strong> ", round(Latitude, 5), "<br>",
+      "<strong>Longitude:</strong> ", round(Longitude, 5)
+    ),
+    radius = 5,
+    fillColor = "darkgreen",
+    color = "black",
+    fillOpacity = 0.7
+  )
+KISO_BUAL_site_map
+
+#Saving KISO_BUAL site map in outputs folder
+saveWidget(KISO_BUAL_site_map, "../outputs/KISO_BUAL_site_map.html", selfcontained = TRUE)
+
+
 ```
