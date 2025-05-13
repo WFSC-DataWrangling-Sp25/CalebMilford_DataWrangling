@@ -42,7 +42,7 @@ all_herp_data
 
 ### Week 3: Intro to data frames
 
-Goal is to parse down the data frame and remove unnecessary columns or info that is not relevant to my project
+Goal is to parse down the data frame and remove unnecessary columns or info that is not relevance to my project
 
 ```{r}
 #Removing completely unnesesary columns 
@@ -59,7 +59,7 @@ all_herp_data_obrev <- all_herp_data2 %>%
 all_herp_data_obrev
 ```
 
-### Week 6: Cleaning untidy data and Week 4: Group Joins
+### Week 6: Cleaning untidy data, Week 7: Dates 
 
 ```{r}
 #Replacing unclear notation or 0's with NA's
@@ -72,48 +72,141 @@ all_herp_data2 <- all_herp_data2 %>%
          Submerged_species = na_if(Submerged_species, "0"), 
          Emergent_species = na_if(Emergent_species, "0"))
   
-#seperating the date column into day month year columns 
+#Reconfiguimng the date column so it is attached to survey time and it is easier to determine 1 individual survey 
 all_herp_data2 <- all_herp_data2 %>% 
-  separate(Date, c("Year", "Month", "Day"), sep = "-")
+  separate(Date, c("Year", "Month", "Day"), sep = "-") %>%
+   mutate(Start_time = str_pad(as.character(Start_time), width = 4, 
+                               side = "left", pad = "0")) %>% 
+  separate(Start_time, c("Hour", "Minute"), sep = 2) %>% 
+  mutate(Date_time = make_datetime(year = as.integer(Year), 
+                                   month = as.integer(Month),
+                                   day = as.integer(Day), 
+                                   hour = as.integer(Hour), 
+                                   min = as.integer(Minute)))
+ all_herp_data2 
+ 
 
 #Changing the data frame to one row per survey instead of one row per 
 #species found 
-all_herp_data3 <- all_herp_data2 %>%
-  group_by(Year, Month, Day, Site_name, Start_time) %>%
+species_encountered <- all_herp_data2 %>%
+  group_by(Date_time, Site_name) %>%
   summarise(Species_all = paste(unique(Species), collapse = ", "),
     .groups = "drop")
 
-all_herp_data3 #Each row is now one individual survey
+species_encountered #Each row is now one individual survey
 
-survey_details <- all_herp_data2 %>% 
-  select(-Taxon, -Species, -No_Obs, -Disposition, -Comments)
+```
+
+```{r}
+#Creating a seperate data frame that is also organized by one row per survey but for survey details alone 
+
+#Just checking the number of times surveys were recorded more than once
+all_herp_data2 %>%  
+  count(Date_time) %>%
+  filter(n > 1)
+
+survey_data <- all_herp_data2 %>%
+  distinct(Date_time, Site_name, .keep_all = TRUE) %>% 
+  select(-Year, -Month, -Day, -Taxon, -Species, -No_Obs,
+         -Grazing_activity) %>% 
+  arrange(Date_time) %>% 
+  relocate(Date_time, .before = 1)
+
+
+```
+
+### Week 7: Strings
+
+#### Determining if dipneting can be used as a detection method or can be thrown out
+
+```{r}
+#Comparing the detection of my species with the Disposition column 
+dispo_test <- all_herp_data2 %>%
+  select(Date_time, Site_name, Species, Disposition,
+         Comments) %>% 
+  filter(Species == "KISO" | Species == "BUAL") %>% 
+  arrange(Date_time)
+
+dispo_test
+
+#Confirming that the only time my species were encountered was during "observed", "removed", "none", aka visual surveys 
+unique(all_herp_data2$Disposition)
+unique(dispo_test$Disposition)
+
+#Also confirming that there wasn't mention of dipetting in the comments 
+#These surveys can be thrown out because they were not applicable for detenction
+#or occupancy 
+str_detect(dispo_test$Comments, "dipnet" )
+str_detect(dispo_test$Comments, "seine")
+
+
+```
+
+### Week 4: Group Joins
+
+```{r}
+#Using left join to put these two data frames back together 
   
-  
-left_join(all_herp_data3, survey_details, join_by(Year, Month, Day, Site_name, Start_time))
+master_df <- left_join(species_encountered, survey_data, join_by(Date_time,
+                                                                 Site_name))
+#removing rows with dipnet and seining surveys 
+master_df <- master_df %>%
+  filter(!str_detect(str_to_lower(Disposition), "dipnet"),
+         !str_detect(str_to_lower(Disposition), "seine"))
 
-#innerjoin - this actually didnt work, unsure why right now. But one big red flag is No_obs because this is def off for this new dataframe 
+write_csv(master_df, "../data_clean//master_df.csv")
+```
 
-#This worked however it did not maintain the orignal data frames number of
-#columns. It only gave back the columns I grouped by. Need to come back and
-#figure out how to have each row represent 1 survey while maintaining all
-#origial columns 
+### Week 12: Making Choices
 
+#### Creating 3 new clean data frames. One for each of my thesis species (KISO and BUAL) that shows encounter history and one with the site survey data
 
+```{r}
+#Mud turtle ecounter history (KISO)
+KISO_EH <- master_df %>% 
+  select(Date_time, Site_name, Species_all) %>% 
+  mutate(EH = if_else(str_detect(Species_all, "KISO"), 1, 0))
 
+write_csv(KISO_EH, "../data_clean//KISO_EH.csv")
+
+#Desert toad encounter history (BUAL)
+BUAL_EH <- master_df %>% 
+  select(Date_time, Site_name, Species_all) %>% 
+  mutate(EH = if_else(str_detect(Species_all, "BUAL"), 1, 0))
+
+write_csv(BUAL_EH, "../data_clean//BUAL_EH.csv")
+
+#Updating the survey_data data frame and removing the dipnetting/seine surveys 
+survey_data <- survey_data %>% 
+  filter(!str_detect(str_to_lower(Disposition), "dipnet"),
+         !str_detect(str_to_lower(Disposition), "seine"))
+
+write_csv(survey_data, "../data_clean//survey_data.csv")
+```
+
+### Week 6 again
+
+```{r}
 #Summarize detections by month/year for each species 
-#This data will help us to determine site closure when lookig at occupancy 
-KISO_monthly_det <- all_herp_data3 %>% 
-  filter(Species_all == "KISO") %>% 
-  group_by(Year, Month) %>% 
-  summarise(Detections = n(), .groups = "drop")
-KISO_monthly_det
+#This data will help us to determine site closure when looking at occupancy
+
+
+KISO_monthly_det <- KISO_EH %>%
+  mutate(Year = year(Date_time),
+         Month = month(Date_time)) %>%
+  group_by(Year, Month) %>%
+  summarise(Detections = sum(EH), .groups = "drop") %>%
+  arrange(Year, Month)
 
 write_csv(KISO_monthly_det, "../data_clean//KISO_monthly_det.csv")
 
-BUAL_monthly_det <- all_herp_data3 %>% 
-  filter(Species == "BUAL") %>% 
-  group_by(Year, Month) %>% 
-  summarise(Detections = n(), .groups = "drop")
+
+BUAL_monthly_det <- BUAL_EH %>%
+  mutate(Year = year(Date_time),
+         Month = month(Date_time)) %>%
+  group_by(Year, Month) %>%
+  summarise(Detections = sum(EH), .groups = "drop") %>%
+  arrange(Year, Month)
 
 write_csv(BUAL_monthly_det, "../data_clean//BUAL_monthly_det.csv")
 
@@ -121,11 +214,12 @@ write_csv(BUAL_monthly_det, "../data_clean//BUAL_monthly_det.csv")
 
 ### Summarizing the \# of times each site was surveyed each year
 
-#### Week 6 again
+#### Week 6 again again
 
 ```{r}
 #Summarizing the # of times each site was surveyed each year
-survey_year_summary <- all_herp_data3 %>% 
+survey_year_summary <- master_df %>%
+  mutate(Year = year(Date_time)) %>% 
   group_by(Site_name, Year) %>% 
   summarise(site_visits = n(), .groups = "drop")
 
@@ -135,11 +229,11 @@ survey_year_summary
 survey_year_summary <- survey_year_summary %>%
   pivot_wider(names_from = Year,
               values_from = site_visits,
-              values_fill = 0  # Fills in 0 where a site has no surveys that year
-  )
+              values_fill = 0)
+
 survey_year_summary
 
-##Note that this was done before dipnet surveys were removed. May need to come back and modify 
+write_csv(survey_year_summary, "../data_clean//survey_year_summary.csv")
 ```
 
 ### Week 5: Data Visualization
@@ -161,47 +255,6 @@ all_herp_data2 %>%
 
 
 #This part still needs a lot of work dont judge me 
-```
-
-### Week 7: Dates and Strings
-
-#### Determining if dipneting can be used as a detection method or can be thrown out
-
-```{r}
-#Comparing the detection of my species with the Disposition column 
-dispo_test <- all_herp_data2 %>%
-  separate(Start_time, c("Hour", "Minute"), sep = 2) %>% 
-  mutate(Date_time = make_datetime(year = as.integer(Year), 
-                                   month = as.integer(Month),
-                                   day = as.integer(Day), 
-                                   hour = as.integer(Hour), 
-                                   min = as.integer(Minute))) %>% 
-  select(Date_time, Site_name, Species, Disposition,
-         Comments) %>% 
-  filter(Species == "KISO" | Species == "BUAL") %>% 
-  arrange(Date_time)
-
-dispo_test
-
-#Confirming that the only time my species were encountered was during 
-#"observed", "removed", "none", aka visual surveys 
-unique(all_herp_data2$Disposition)
-unique(dispo_test$Disposition)
-
-#Also confirming that there wasn't mention of dipetting in the comments 
-#These surveys can be thrown out because they were not applicable for detenction
-#or occupancy 
-str_detect(dispo_test$Comments, "dipnet")
-
-
-```
-
-### Week 12: Making Choices
-
-#### Creating a new data frame that shows encounter history instead of \# of individuals found using if/else
-
-```{r}
-
 ```
 
 ### Week 14: Geospacial Data
