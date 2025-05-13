@@ -59,7 +59,7 @@ all_herp_data_obrev <- all_herp_data2 %>%
 all_herp_data_obrev
 ```
 
-### Week 6: Cleaning untidy data, Week 7: Dates 
+### Week 6: Cleaning untidy data, Week 7: Dates
 
 ```{r}
 #Replacing unclear notation or 0's with NA's
@@ -112,6 +112,7 @@ survey_data <- all_herp_data2 %>%
   arrange(Date_time) %>% 
   relocate(Date_time, .before = 1)
 
+survey_data
 
 ```
 
@@ -153,6 +154,7 @@ master_df <- left_join(species_encountered, survey_data, join_by(Date_time,
 master_df <- master_df %>%
   filter(!str_detect(str_to_lower(Disposition), "dipnet"),
          !str_detect(str_to_lower(Disposition), "seine"))
+master_df
 
 write_csv(master_df, "../data_clean//master_df.csv")
 ```
@@ -236,26 +238,7 @@ survey_year_summary
 write_csv(survey_year_summary, "../data_clean//survey_year_summary.csv")
 ```
 
-### Week 5: Data Visualization
-
-```{r}
-all_herp_data2 %>% 
-  filter(Species == "KISO") %>% 
-  ggplot(aes(x = Air_temp_150cm_C, y = Water_tmp_5cm_C))+
-  geom_point()+
-  labs(x = "Air Temp (C)", y = "Water Temp (C)")+
-  theme_bw()
-
-all_herp_data2 %>% 
-  filter(Species == "BUAL") %>% 
-  ggplot(aes(x = Air_temp_150cm_C, y = Water_tmp_5cm_C))+
-  geom_point()+
-  labs(x = "Air Temp (C)", y = "Water Temp (C)")+
-  theme_bw()
-
-
-#This part still needs a lot of work dont judge me 
-```
+### 
 
 ### Week 14: Geospacial Data
 
@@ -291,11 +274,10 @@ RABE_sites
 write_csv(RABE_sites, "../data_clean//RABE_sites.csv")
 
 #Now plotting the points on an interactive map 
-#I recognize we never used the leaflet package in class but this is very helpful for
-#my project so I decided to go for it 
+#I recognize we never used the leaflet package in class but this is very helpful for my project so I decided to go for it 
 
 RABE_site_map <- leaflet(data = RABE_sites) %>%
-  addTiles() %>%  # Adds the default OpenStreetMap tiles
+  addTiles() %>%  # Adds OpenStreetMap tiles
   addCircleMarkers(
     lng = ~Longitude,
     lat = ~Latitude,
@@ -314,10 +296,11 @@ RABE_site_map
 
 #Saving RABE site map in outputs folder 
 saveWidget(RABE_site_map, "../outputs/RABE_sites_map.html", selfcontained = TRUE)
+```
 
-
+```{r}
 #Now doing the same with the KISO/BUAL Data sets 
-KISO_BUAL_sites <- all_herp_data2 %>% 
+KISO_BUAL_sites <- master_df %>% 
   select(Site_name, Start_NAD83_East, Start_NAD83_North) %>%
   drop_na() %>% 
   distinct(Site_name, Start_NAD83_East, Start_NAD83_North, .keep_all = TRUE)
@@ -356,4 +339,56 @@ KISO_BUAL_site_map
 saveWidget(KISO_BUAL_site_map, "../outputs/KISO_BUAL_site_map.html", selfcontained = TRUE)
 
 
+```
+
+### Week 5: Data Visualization
+
+#### Creating a plot that shows the proportion of detections per month per year and per species
+
+```{r}
+combined_EH <- KISO_EH %>%
+  rename(KISO_EH = EH) %>% 
+  left_join(
+    BUAL_EH %>%
+      select(Date_time, Site_name, BUAL_EH = EH),
+    by = c("Date_time", "Site_name")
+  )
+
+#Pivoting to lomng format so it is easier to plot 
+long_EH <- combined_EH %>%
+  mutate(year = year(Date_time),
+         month = month(Date_time, label = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = c(KISO_EH, BUAL_EH),
+    names_to = "species",
+    values_to = "detected"
+  ) %>%
+  mutate(
+    species = str_remove(species, "_EH")  # makes it just "KISO" and "BUAL"
+  )
+
+#Calculating the proportion of detection per month/year
+prop_monthly <- long_EH %>%
+  group_by(species, year, month) %>%
+  summarise(
+    prop_detected = mean(detected, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(species_year = paste(species, year))
+
+#Plotting using ggplot 
+prop_detec_plot <- ggplot(prop_monthly, aes(x = month, y = prop_detected, fill = species)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~year, ncol = 1) +
+  labs(title = "Monthly Detection Proportions by Species for each Year",
+       x = "Month",
+       y = "Proportion of Surveys with Detection"
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_bw()
+
+prop_detec_plot
+
+ggsave("../outputs/prop_detec_plot.png", plot = prop_detec_plot)
 ```
