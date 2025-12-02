@@ -137,8 +137,10 @@ unique(dispo_test$Disposition)
 #Also confirming that there wasn't mention of dipetting in the comments 
 #These surveys can be thrown out because they were not applicable for detenction
 #or occupancy 
-str_detect(dispo_test$Comments, "dipnet" )
-str_detect(dispo_test$Comments, "seine")
+sum(str_detect(dispo_test$Comments, regex("dipnet", ignore_case = TRUE))
+      %in% TRUE, na.rm = TRUE)
+sum(str_detect(dispo_test$Comments, regex("seine", ignore_case = TRUE))
+    %in% TRUE, na.rm = TRUE)
 
 
 ```
@@ -200,6 +202,8 @@ KISO_monthly_det <- KISO_EH %>%
   summarise(Detections = sum(EH), .groups = "drop") %>%
   arrange(Year, Month)
 
+KISO_monthly_det
+
 write_csv(KISO_monthly_det, "../data_clean//KISO_monthly_det.csv")
 
 
@@ -209,6 +213,8 @@ BUAL_monthly_det <- BUAL_EH %>%
   group_by(Year, Month) %>%
   summarise(Detections = sum(EH), .groups = "drop") %>%
   arrange(Year, Month)
+
+BUAL_monthly_det
 
 write_csv(BUAL_monthly_det, "../data_clean//BUAL_monthly_det.csv")
 
@@ -339,6 +345,150 @@ KISO_BUAL_site_map
 saveWidget(KISO_BUAL_site_map, "../outputs/KISO_BUAL_site_map.html", selfcontained = TRUE)
 
 
+```
+
+**Making a map with all sites from all years designated by species**
+
+```{r}
+#Starting a new map with KISO and BUAL marked at the sites observed
+
+
+#Creating a df that designated what species was found at each site (KISO, BUAL, Both, None)
+site_species <- master_df %>%
+  # extract site-level species presence
+  group_by(Site_name) %>%
+  summarize(
+    has_KISO = any(str_detect(Species_all, "KISO"), na.rm = TRUE),
+    has_BUAL = any(str_detect(Species_all, "BUAL"), na.rm = TRUE)
+  ) %>%
+  mutate(
+    Species_Category = case_when(
+      has_KISO & has_BUAL ~ "Both",
+      has_KISO ~ "KISO",
+      has_BUAL ~ "BUAL",
+      TRUE ~ "None"
+    )
+  )
+
+#Join the above data frame into a new one to help plot it 
+KISO_BUAL_sites2 <- KISO_BUAL_sites %>%
+  left_join(site_species, by = "Site_name") %>% 
+  mutate(
+    Color = case_when(
+      Species_Category == "KISO" ~ "blue",
+      Species_Category == "BUAL" ~ "red",
+      Species_Category == "Both" ~ "purple",
+      Species_Category == "None" ~ "gray",
+      TRUE ~ "black"   # fallback
+    )
+  )
+
+
+KISO_BUAL_species_map <- leaflet(KISO_BUAL_sites2) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    color = ~Color,
+    fillColor = ~Color,
+    fillOpacity = 0.8,
+    radius = 6,
+    popup = ~paste0(
+      "<strong>Site Name:</strong> ", Site_name, "<br>",
+      "<strong>Species:</strong> ", Species_Category, "<br>",
+      "<strong>Latitude:</strong> ", round(Latitude, 5), "<br>",
+      "<strong>Longitude:</strong> ", round(Longitude, 5)
+    )
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    colors = species_colors,
+    labels = names(species_colors),
+    title = "Species Presence"
+  )
+
+#Saving KISO_BUAL_species_map in outputs folder
+saveWidget(KISO_BUAL_species_map, "../outputs/KISO_BUAL_species_map.html", selfcontained = TRUE)
+```
+
+Now making maps for each year
+
+```{r}
+#Extracting year from each site and making a new column 
+master_df <- master_df %>%
+  mutate(Year = year(Date_time))
+
+#Building species-category column per site-year 
+site_species_year <- master_df %>%
+  group_by(Site_name, Year) %>%
+  summarize(
+    has_KISO = any(str_detect(Species_all, "KISO"), na.rm = TRUE),
+    has_BUAL = any(str_detect(Species_all, "BUAL"), na.rm = TRUE)
+  ) %>%
+  mutate(
+    Species_Category = case_when(
+      has_KISO & has_BUAL ~ "Both",
+      has_KISO ~ "KISO",
+      has_BUAL ~ "BUAL",
+      TRUE ~ "None"
+    )
+  )
+
+#Joining the above table with the site coordinates and adding colors 
+KISO_BUAL_sites_year <- KISO_BUAL_sites %>%
+  left_join(site_species_year, by = "Site_name") %>% 
+  mutate(
+    Color = case_when(
+      Species_Category == "KISO" ~ "blue",
+      Species_Category == "BUAL" ~ "red",
+      Species_Category == "Both" ~ "purple",
+      Species_Category == "None" ~ "gray",
+      TRUE ~ "black"
+    )
+  )
+
+#Making the maps 
+years <- sort(unique(KISO_BUAL_sites_year$Year))
+
+year_maps <- list()
+
+for (yr in years) {
+  
+  df_year <- KISO_BUAL_sites_year %>% filter(Year == yr)
+  
+  year_maps[[as.character(yr)]] <- leaflet(df_year) %>%
+    addTiles() %>%
+    addCircleMarkers(
+      lng = ~Longitude,
+      lat = ~Latitude,
+      color = ~Color,
+      fillColor = ~Color,
+      fillOpacity = 0.8,
+      radius = 6,
+      popup = ~paste0(
+        "<strong>Site Name:</strong> ", Site_name, "<br>",
+        "<strong>Year:</strong> ", Year, "<br>",
+        "<strong>Species:</strong> ", Species_Category, "<br>",
+        "<strong>Latitude:</strong> ", round(Latitude, 5), "<br>",
+        "<strong>Longitude:</strong> ", round(Longitude, 5)
+      )
+    ) %>%
+    addLegend(
+      position = "bottomright",
+      colors = c("blue", "red", "purple", "gray"),
+      labels = c("KISO", "BUAL", "Both", "None"),
+      title = paste("Species Presence", yr)
+    )
+}
+
+year_maps[["2022"]]
+year_maps[["2023"]]
+year_maps[["2024"]]
+
+#Saving KISO_BUAL year maps in outputs folder
+saveWidget(year_maps[["2022"]], "../outputs/KISO_BUAL_map_2022.html", selfcontained = TRUE)
+saveWidget(year_maps[["2023"]], "../outputs/KISO_BUAL_map_2023.html", selfcontained = TRUE)
+saveWidget(year_maps[["2024"]], "../outputs/KISO_BUAL_map_2024.html", selfcontained = TRUE)
 ```
 
 ### Week 5: Data Visualization
