@@ -392,7 +392,7 @@ KISO_BUAL_species_map <- leaflet(KISO_BUAL_sites2) %>%
     color = ~Color,
     fillColor = ~Color,
     fillOpacity = 0.8,
-    radius = 6,
+    radius = 4,
     popup = ~paste0(
       "<strong>Site Name:</strong> ", Site_name, "<br>",
       "<strong>Species:</strong> ", Species_Category, "<br>",
